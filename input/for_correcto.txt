@@ -1,0 +1,11 @@
+int x;
+int a;
+int z;
+
+x = 0;
+a = 1;
+z = 2;
+
+for (x = 0; x < 5; x = x + 1) {
+    a = a * x + z;
+}

@@ -1,0 +1,12 @@
+
+int main () {
+    int x;
+
+    for(x = 0, a = 1, z = 2; x < 5; ++x)
+     {
+        a = a * x + z;
+        x = a;
+     }
+    
+    return x;
+}
