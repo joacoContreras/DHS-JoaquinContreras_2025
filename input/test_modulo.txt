@@ -1,0 +1,6 @@
+int x = 10;
+int y = 3;
+double z = 5.5;
+
+int valido = x % y;
+x = z % y;

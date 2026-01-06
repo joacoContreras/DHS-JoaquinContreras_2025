@@ -86,6 +86,20 @@ class Escucha(compiladorListener):
             ):
                 return
             
+            # Si tiene inicialización, validar tipo del valor
+            if inicializado and inic_ctx.getChildCount() >= 2:
+                # inic : ASIG opal
+                valor_ctx = inic_ctx.getChild(1)  # El opal
+                tipo_valor = self.validator.inferir_tipo(valor_ctx, self.symbol_manager.obtener_tabla_simbolos())
+                
+                if tipo_valor:
+                    self.validator.validar_tipo_compatible(
+                        tipo, 
+                        tipo_valor, 
+                        linea,
+                        f"Inicialización de '{primer_id}'"
+                    )
+            
             # Agregar variable
             self.symbol_manager.agregar_variable(primer_id, tipo, linea, inicializado)
             
@@ -109,6 +123,19 @@ class Escucha(compiladorListener):
                 if ctx.getChildCount() >= 3:
                     inic_ctx = ctx.getChild(2)
                     inicializado = inic_ctx and inic_ctx.getChildCount() > 0
+                    
+                    # Si tiene inicialización, validar tipo del valor
+                    if inicializado and inic_ctx.getChildCount() >= 2:
+                        valor_ctx = inic_ctx.getChild(1)  # El opal
+                        tipo_valor = self.validator.inferir_tipo(valor_ctx, self.symbol_manager.obtener_tabla_simbolos())
+                        
+                        if tipo_valor:
+                            self.validator.validar_tipo_compatible(
+                                self.tipo_actual, 
+                                tipo_valor, 
+                                self.linea_actual,
+                                f"Inicialización de '{nombre_var}'"
+                            )
                 
                 # Validar doble declaración
                 if not self.validator.validar_doble_declaracion(

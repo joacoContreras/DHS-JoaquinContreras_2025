@@ -133,7 +133,7 @@ class SemanticValidator:
     
     def inferir_tipo(self, ctx, tabla_simbolos):
         """
-        Intenta inferir el tipo de una expresión
+        Intenta inferir el tipo de una expresión con validación de operaciones
         
         Args:
             ctx: Contexto de ANTLR de la expresión
@@ -145,20 +145,42 @@ class SemanticValidator:
         if ctx is None:
             return None
         
+        # Obtener el nombre de la regla
+        tipo_regla = type(ctx).__name__
+        
+        # ===== FACTOR: base de las expresiones =====
+        if 'FactorContext' in tipo_regla:
+            return self._inferir_tipo_factor(ctx, tabla_simbolos)
+        
+        # ===== TERM: multiplicación, división, módulo, comparaciones =====
+        if 'TermContext' in tipo_regla:
+            return self._inferir_tipo_term(ctx, tabla_simbolos)
+        
+        # ===== EXP: suma, resta =====
+        if 'ExpContext' in tipo_regla:
+            return self._inferir_tipo_exp(ctx, tabla_simbolos)
+        
+        # ===== OPAL: operación algebraica/lógica =====
+        if 'OpalContext' in tipo_regla:
+            if ctx.getChildCount() > 0:
+                return self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # Para otros contextos, método genérico
         texto = ctx.getText()
         
         # Si contiene punto decimal, es double
-        if '.' in texto:
+        if '.' in texto and any(c.isdigit() for c in texto):
             return "double"
         
         # Si es solo dígitos, es int
         if texto.isdigit():
             return "int"
         
-        # Si es un identificador, buscar su tipo
-        simbolo = tabla_simbolos.buscarSimbolo(texto)
-        if simbolo:
-            return simbolo.getTipoDato()
+        # Si es un identificador simple, buscar su tipo
+        if texto.isidentifier():
+            simbolo = tabla_simbolos.buscarSimbolo(texto)
+            if simbolo:
+                return simbolo.getTipoDato()
         
         # Si tiene hijos, revisar recursivamente
         if hasattr(ctx, 'getChildCount') and ctx.getChildCount() > 0:
@@ -168,6 +190,177 @@ class SemanticValidator:
                     return tipo
         
         return None
+    
+    def _inferir_tipo_factor(self, ctx, tabla_simbolos):
+        """Infiere tipo de un factor"""
+        from compiladorParser import compiladorParser
+        
+        if ctx.getChildCount() == 0:
+            return None
+        
+        # factor : PA exp PC | NUMERO | ID | ID PA argumentos? PC
+        primer_hijo = ctx.getChild(0)
+        texto = primer_hijo.getText()
+        
+        # Paréntesis: ( exp )
+        if texto == '(':
+            if ctx.getChildCount() >= 2:
+                return self.inferir_tipo(ctx.getChild(1), tabla_simbolos)
+        
+        # Número con punto decimal = double
+        if '.' in texto and any(c.isdigit() for c in texto):
+            return "double"
+        
+        # Número entero = int
+        if texto.isdigit():
+            return "int"
+        
+        # Identificador (variable o llamada a función)
+        if texto.isidentifier():
+            simbolo = tabla_simbolos.buscarSimbolo(texto)
+            if simbolo:
+                return simbolo.getTipoDato()
+        
+        return None
+    
+    def _inferir_tipo_term(self, ctx, tabla_simbolos):
+        """Infiere tipo de un term con validación de operaciones"""
+        if ctx.getChildCount() < 2:
+            # Solo factor
+            return self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # term : factor t | factor l
+        tipo_izq = self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # Ver si hay operación (t o l)
+        if ctx.getChildCount() >= 2:
+            operacion_ctx = ctx.getChild(1)
+            if operacion_ctx and operacion_ctx.getChildCount() > 0:
+                return self._procesar_operacion(tipo_izq, operacion_ctx, tabla_simbolos, ctx.start.line)
+        
+        return tipo_izq
+    
+    def _inferir_tipo_exp(self, ctx, tabla_simbolos):
+        """Infiere tipo de una expresión con validación de operaciones"""
+        if ctx.getChildCount() < 2:
+            # Solo term
+            return self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # exp : term e
+        tipo_izq = self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # Ver si hay continuación 'e'
+        if ctx.getChildCount() >= 2:
+            e_ctx = ctx.getChild(1)
+            if e_ctx and e_ctx.getChildCount() > 0:
+                return self._procesar_operacion_e(tipo_izq, e_ctx, tabla_simbolos, ctx.start.line)
+        
+        return tipo_izq
+    
+    def _procesar_operacion(self, tipo_izq, operacion_ctx, tabla_simbolos, linea):
+        """Procesa operaciones en 't' y 'l' (*, /, %, <, >, ==, etc.)"""
+        if not operacion_ctx or operacion_ctx.getChildCount() < 2:
+            return tipo_izq
+        
+        # t : MULT factor t | DIV factor t | MOD factor t
+        # l : MENOR factor l | MAYOR factor l | ...
+        operador = operacion_ctx.getChild(0).getText()
+        tipo_der = self.inferir_tipo(operacion_ctx.getChild(1), tabla_simbolos)
+        
+        # Validar compatibilidad de tipos
+        tipo_resultado = self._validar_operacion_binaria(tipo_izq, tipo_der, operador, linea)
+        
+        # Si hay más operaciones, procesar recursivamente
+        if operacion_ctx.getChildCount() >= 3:
+            siguiente_ctx = operacion_ctx.getChild(2)
+            if siguiente_ctx and siguiente_ctx.getChildCount() > 0:
+                return self._procesar_operacion(tipo_resultado, siguiente_ctx, tabla_simbolos, linea)
+        
+        return tipo_resultado
+    
+    def _procesar_operacion_e(self, tipo_izq, e_ctx, tabla_simbolos, linea):
+        """Procesa operaciones en 'e' (+, -)"""
+        if not e_ctx or e_ctx.getChildCount() < 2:
+            return tipo_izq
+        
+        # e : SUMA term e | RESTA term e
+        operador = e_ctx.getChild(0).getText()
+        tipo_der = self.inferir_tipo(e_ctx.getChild(1), tabla_simbolos)
+        
+        # Validar compatibilidad
+        tipo_resultado = self._validar_operacion_binaria(tipo_izq, tipo_der, operador, linea)
+        
+        # Si hay más operaciones, procesar recursivamente
+        if e_ctx.getChildCount() >= 3:
+            siguiente_ctx = e_ctx.getChild(2)
+            if siguiente_ctx and siguiente_ctx.getChildCount() > 0:
+                return self._procesar_operacion_e(tipo_resultado, siguiente_ctx, tabla_simbolos, linea)
+        
+        return tipo_resultado
+    
+    def _validar_operacion_binaria(self, tipo_izq, tipo_der, operador, linea):
+        """
+        Valida una operación binaria y retorna el tipo resultante
+        
+        Reglas:
+        - int op int = int (para aritméticas) o int (para comparaciones siempre int/bool)
+        - double op double = double (para aritméticas)
+        - int op double = double (promoción)
+        - double op int = double (promoción)
+        - Comparaciones siempre retornan int (simulando bool)
+        - Módulo (%) solo acepta int op int
+        """
+        if tipo_izq is None or tipo_der is None:
+            return None  # No podemos validar
+        
+        # Operadores de comparación retornan int (simulando bool)
+        operadores_comparacion = ['<', '>', '<=', '>=', '==', '!=']
+        if operador in operadores_comparacion:
+            # Validar que los tipos sean compatibles
+            if tipo_izq != tipo_der:
+                if not ((tipo_izq == "int" and tipo_der == "double") or 
+                       (tipo_izq == "double" and tipo_der == "int")):
+                    self.error_manager.reportar_error_semantico(
+                        linea,
+                        f"Tipos incompatibles en comparación: '{tipo_izq}' {operador} '{tipo_der}'"
+                    )
+            return "int"  # Las comparaciones retornan booleano (representado como int)
+        
+        # Módulo solo acepta enteros
+        if operador == '%':
+            if tipo_izq != "int" or tipo_der != "int":
+                self.error_manager.reportar_error_semantico(
+                    linea,
+                    f"El operador módulo (%) requiere operandos enteros, se encontró: '{tipo_izq}' % '{tipo_der}'"
+                )
+                return "int"
+            return "int"
+        
+        # Operaciones aritméticas (+, -, *, /)
+        # Regla: si alguno es double, el resultado es double
+        if tipo_izq == "double" or tipo_der == "double":
+            if tipo_izq != "double" and tipo_izq != "int":
+                self.error_manager.reportar_error_semantico(
+                    linea,
+                    f"Tipo incompatible en operación: '{tipo_izq}' {operador} '{tipo_der}'"
+                )
+            if tipo_der != "double" and tipo_der != "int":
+                self.error_manager.reportar_error_semantico(
+                    linea,
+                    f"Tipo incompatible en operación: '{tipo_izq}' {operador} '{tipo_der}'"
+                )
+            return "double"
+        
+        # Si ambos son int, el resultado es int
+        if tipo_izq == "int" and tipo_der == "int":
+            return "int"
+        
+        # Tipos incompatibles
+        self.error_manager.reportar_error_semantico(
+            linea,
+            f"Tipos incompatibles en operación: '{tipo_izq}' {operador} '{tipo_der}'"
+        )
+        return tipo_izq  # Retornar algo para continuar
     
     def validar_asignacion(self, id_nombre, valor_ctx, linea, tabla_simbolos):
         """
