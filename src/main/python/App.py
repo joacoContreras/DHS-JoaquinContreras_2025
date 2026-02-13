@@ -82,7 +82,7 @@ def main(argv):
         
         # GENERAR CÓDIGO INTERMEDIO
         print("\n" + "="*60)
-        print("CÓDIGO INTERMEDIO (Three Address Code)")
+        print("CÓDIGO INTERMEDIO")
         print("="*60)
         generador = IntermediateCodeGenerator()
         generador.visit(tree)

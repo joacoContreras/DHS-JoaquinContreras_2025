@@ -1,6 +1,5 @@
 """
-Generador de Código Intermedio (Three Address Code - TAC)
-Convierte el AST en instrucciones de tres direcciones
+Generador de Código Intermedio
 """
 from compiladorVisitor import compiladorVisitor
 from compiladorParser import compiladorParser
