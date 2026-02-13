@@ -1,6 +1,12 @@
 import sys
-from antlr4 import *
-from antlr4.error.ErrorListener import ErrorListener
+try:
+    from antlr4 import FileStream, CommonTokenStream
+    from antlr4.error.ErrorListener import ErrorListener
+except ImportError:
+    print('Missing dependency: antlr4 runtime is not installed.')
+    print('Install it with: python3 -m pip install antlr4-python3-runtime')
+    print('Or create/activate the project virtualenv and install the package there.')
+    sys.exit(1)
 from compiladorLexer import compiladorLexer
 from compiladorParser import compiladorParser
 from Escucha import Escucha
@@ -35,7 +41,7 @@ class CustomErrorListener(ErrorListener):
         self.error_manager.reportar_error_sintactico(line, mensaje_simple)
 
 def main(argv):
-    archivo = "input/for.txt"
+    archivo = "input/for_correcto.txt"
     if len(argv) > 1 :
         archivo = argv[1]
     

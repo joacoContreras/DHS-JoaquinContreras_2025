@@ -16,6 +16,9 @@ class SymbolTableManager:
             tabla_simbolos: Instancia de TS (si es None, usa el singleton)
         """
         self.ts = tabla_simbolos if tabla_simbolos else TS.getInstance()
+        # Cache total symbols to make __str__ O(1).
+        # Initialize from current TS state in case it already has contexts/symbols.
+        self._total_simbolos = sum(len(ctx.simbolos) for ctx in self.ts.contextos)
     
     def agregar_contexto(self):
         """Agrega un nuevo contexto (scope) a la tabla"""
@@ -23,7 +26,12 @@ class SymbolTableManager:
     
     def eliminar_contexto(self):
         """Elimina el contexto actual"""
-        self.ts.delContexto()
+        # Subtract symbols from the context that will be removed to keep cache consistent
+        if len(self.ts.contextos) > 1:
+            ultimo = self.ts.contextos[-1]
+            num = len(ultimo.simbolos)
+            self.ts.delContexto()
+            self._total_simbolos = max(0, self._total_simbolos - num)
     
     def agregar_variable(self, nombre, tipo, linea, inicializado=False):
         """
@@ -48,6 +56,8 @@ class SymbolTableManager:
         
         if exito:
             print(f"  -> Variable '{nombre}' de tipo '{tipo}' agregada")
+            # Update cached total
+            self._total_simbolos += 1
         
         return exito
     
@@ -71,6 +81,8 @@ class SymbolTableManager:
         
         if exito:
             print(f"  -> Función '{nombre}()' de tipo '{tipo_retorno}' agregada")
+            # Update cached total
+            self._total_simbolos += 1
         
         return exito
     
@@ -170,5 +182,5 @@ class SymbolTableManager:
     def __str__(self):
         """Representación en string del gestor"""
         num_contextos = len(self.ts.contextos)
-        total_simbolos = sum(len(ctx.simbolos) for ctx in self.ts.contextos)
+        total_simbolos = self._total_simbolos
         return f"SymbolTableManager(contextos={num_contextos}, símbolos={total_simbolos})"

@@ -89,14 +89,7 @@ ielse : ELSE instruccion
            |
            ;
 
-ifor : FOR PA (asignacionFor | declaracionFor) PYC (opal) PYC (asignacionFor) PC bloque ;
-
-asignacionFor : ID (ASIG | MASIG | RESIG | MULASIG | DIVASIG | MODASIG) opal
-              | ID INCREMENTO
-              | ID DECREMENTO
-          ;
-
-declaracionFor: tipo ID inic listavar ;
+ifor : FOR PA (asignacion | declaracion) (opal) PYC (asignacionFor) PC bloque ;
 
 declaracion : tipo ID inic listavar PYC ;
 
