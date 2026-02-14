@@ -22,7 +22,7 @@ class ErrorManager:
     
     @classmethod
     def reset(cls):
-        """Reinicia el ErrorManager (útil para nuevos análisis)"""
+        """Reinicia el ErrorManager (para nuevos análisis)"""
         cls._instance = ErrorManager()
         return cls._instance
     
@@ -41,7 +41,7 @@ class ErrorManager:
         """
         error = f"[SINTÁCTICO] Línea {linea}: {mensaje}"
         self.errores_sintacticos.append(error)
-        print(f"⚠ {error}")
+        print(f"{error}")
     
     def reportar_error_semantico(self, linea, mensaje):
         """
@@ -53,7 +53,7 @@ class ErrorManager:
         """
         error = f"[SEMÁNTICO] Línea {linea}: {mensaje}"
         self.errores_semanticos.append(error)
-        print(f"⚠ {error}")
+        print(f"{error}")
     
     def tiene_errores(self):
         """Retorna True si hay algún error registrado"""
@@ -83,17 +83,15 @@ class ErrorManager:
         if total_errores == 0:
             # No hay errores, mostrar tabla de símbolos si se proporciona
             if tabla_simbolos:
-                print("\n--- TABLA DE SIMBOLOS FINAL ---")
                 print(tabla_simbolos)
             else:
-                print("\n✓ Análisis completado sin errores")
+                print("\nAnálisis completado sin errores")
             return
         
         # Hay errores, mostrar reporte detallado
         self._imprimir_reporte_detallado()
     
     def _imprimir_reporte_detallado(self):
-        """Imprime un reporte detallado de todos los errores"""
         print("\n" + "=" * 60)
         print("         REPORTE DE ERRORES")
         print("=" * 60)
@@ -103,13 +101,13 @@ class ErrorManager:
         print("=" * 60)
         
         if self.errores_sintacticos:
-            print("\n❌ ERRORES SINTÁCTICOS:")
+            print("\nERRORES SINTÁCTICOS:")
             print("-" * 60)
             for error in self.errores_sintacticos:
                 print(f"  {error}")
         
         if self.errores_semanticos:
-            print("\n❌ ERRORES SEMÁNTICOS:")
+            print("\nERRORES SEMÁNTICOS:")
             print("-" * 60)
             for error in self.errores_semanticos:
                 print(f"  {error}")
