@@ -45,21 +45,41 @@ class IntermediateCodeGenerator(compiladorVisitor):
     # ========== VISITADORES PARA EXPRESIONES ==========
     
     def visitOpal(self, ctx):
-        """Visita operación algebraica/lógica y retorna el temporal con el resultado"""
-        return self.visit(ctx.exp())
+                """
+                Visita un nodo 'opal' (operación algebraica/lógica) y retorna la
+                representación (literal, identificador o temporal) del resultado.
+
+                Contract:
+                - Input: ctx (OpalContext) que contiene una producción 'exp'.
+                - Output: string con el nombre del lugar donde está el resultado
+                    (por ejemplo '5', 'x' o 't0').
+                - Efectos: delega totalmente en visitExp; puede provocar que se
+                    emitan instrucciones TAC cuando las subexpresiones lo requieran.
+
+                Nota: Este método es un adaptador simple que mantiene la separación
+                entre la regla léxica "opal" y la implementación de la lógica en
+                visitExp.
+                """
+                return self.visit(ctx.exp())
     
     def visitExp(self, ctx):
         """
         Maneja expresiones: exp = term e
         Donde e puede ser: + term e | - term e | vacio
         """
-        # Obtener el primer term
+        # Obtener el primer term (lado izquierdo inicial).
+        # Puede devolver un número literal, un identificador o un temporal
+        # si la subexpresión ya generó código.
         result = self.visit(ctx.term())
-        
-        # Si hay 'e' (expresiones adicionales)
+
+        # Si hay 'e' (continuación de sumas/restas), la procesamos pasando
+        # el resultado acumulado como 'left_operand'. Esto construye
+        # secuencialmente las operaciones left-to-right y emite TAC
+        # intermedio en cada paso.
         if ctx.e():
             result = self.visit_e(ctx.e(), result)
-        
+
+        # 'result' es la representación final del valor de la expresión.
         return result
     
     def visit_e(self, ctx, left_operand):
@@ -67,24 +87,25 @@ class IntermediateCodeGenerator(compiladorVisitor):
         Procesa la continuación de expresión (e)
         e : SUMA term e | RESTA term e | vacío
         """
+        # Caso base: si no hay hijos es la producción vacía (epsilon). En
+        # ese caso devolvemos el operando acumulado tal cual.
         if ctx.getChildCount() == 0:
-            # Es epsilon (vacío)
             return left_operand
         
-        # Obtener el operador
-        op = ctx.getChild(0).getText()  # SUMA o RESTA
-        
-        # Obtener el term
+        # Obtener el operador (+ o -) y evaluar el operando derecho.
+        op = ctx.getChild(0).getText()
         right = self.visit(ctx.term())
-        
-        # Generar temporal para el resultado
+
+        # Crear un temporal para almacenar el resultado de la operación
+        # izquierda op derecha. Emitimos la instrucción TAC correspondiente.
         result = self.nuevo_temporal()
         self.emitir(f"{result} = {left_operand} {op} {right}")
-        
-        # Si hay más 'e', procesar recursivamente
+
+        # Si hay más operaciones encadenadas, seguir acumulando de forma
+        # recursiva usando el temporal recién creado como nuevo left_operand.
         if ctx.e():
             return self.visit_e(ctx.e(), result)
-        
+
         return result
     
     def visitTerm(self, ctx):
@@ -93,17 +114,18 @@ class IntermediateCodeGenerator(compiladorVisitor):
         t: operaciones multiplicativas
         l: operaciones comparativas
         """
-        # Obtener el primer factor
+        # Evaluar el primer factor (puede ser número, variable o subexpresión
+        # parentizada) y luego aplicar multiplicaciones/divisiones (t) y/o
+        # comparaciones (l) si existen. Las reglas 't' y 'l' consumen parte
+        # del árbol y devuelven la representación acumulada.
         result = self.visit(ctx.factor())
-        
-        # Si hay 't' (multiplicación/división/módulo)
+
         if ctx.t():
             result = self.visit_t(ctx.t(), result)
-        
-        # Si hay 'l' (comparaciones)
+
         if ctx.l():
             result = self.visit_l(ctx.l(), result)
-        
+
         return result
     
     def visit_t(self, ctx, left_operand):
@@ -111,23 +133,22 @@ class IntermediateCodeGenerator(compiladorVisitor):
         Procesa operaciones multiplicativas (t)
         t : MULT factor t | DIV factor t | MOD factor t | vacío
         """
+        # Caso base: t vacío -> devolvemos el operando izquierdo tal cual.
         if ctx.getChildCount() == 0:
             return left_operand
-        
-        # Obtener el operador
-        op = ctx.getChild(0).getText()  # *, /, %
-        
-        # Obtener el factor
+
+        # Multiplicación/división/mod: obtener operador y evaluar el factor
+        op = ctx.getChild(0).getText()
         right = self.visit(ctx.factor())
-        
-        # Generar temporal
+
+        # Generar temporal para el resultado y emitir la instrucción TAC
         result = self.nuevo_temporal()
         self.emitir(f"{result} = {left_operand} {op} {right}")
-        
-        # Si hay más 't', procesar recursivamente
+
+        # Si hay más operaciones de t encadenadas, procesarlas recursivamente
         if ctx.t():
             return self.visit_t(ctx.t(), result)
-        
+
         return result
     
     def visit_l(self, ctx, left_operand):
@@ -135,23 +156,22 @@ class IntermediateCodeGenerator(compiladorVisitor):
         Procesa operaciones comparativas (l)
         l : MENOR | MAYOR | MENOREQ | MAYOREQ | EQUAL | NEQUAL factor l | vacío
         """
+        # Si no hay comparador, devolvemos el operando acumulado.
         if ctx.getChildCount() == 0:
             return left_operand
-        
-        # Obtener el operador
-        op = ctx.getChild(0).getText()  # <, >, <=, >=, ==, !=
-        
-        # Obtener el factor
+
+        # Comparadores: tomar operador y evaluar el operando derecho
+        op = ctx.getChild(0).getText()
         right = self.visit(ctx.factor())
-        
-        # Generar temporal
+
+        # Crear temporal para el resultado de la comparación
         result = self.nuevo_temporal()
         self.emitir(f"{result} = {left_operand} {op} {right}")
-        
-        # Si hay más 'l', procesar recursivamente
+
+        # Recursión si hay más comparadores encadenados
         if ctx.l():
             return self.visit_l(ctx.l(), result)
-        
+
         return result
     
     def visitFactor(self, ctx):
@@ -159,30 +179,31 @@ class IntermediateCodeGenerator(compiladorVisitor):
         Maneja factores: números, variables, expresiones entre paréntesis, llamadas a función
         factor : (exp) | NUMERO | ID | ID(argumentos?)
         """
-        # Si es un número
+        # Si es un número (hoja): devolvemos el token tal cual.
         if ctx.NUMERO():
             return ctx.NUMERO().getText()
         
         # Si es un identificador
         elif ctx.ID():
-            # Verificar si es una llamada a función (tiene paréntesis)
+            # Si tiene paréntesis, es una llamada a función; debemos evaluar
+            # sus argumentos (si existen) y emitir instrucciones 'param'
+            # antes de la llamada. El resultado de la llamada se guarda en
+            # un temporal.
             if ctx.PA():
-                # Es una llamada a función
                 func_name = ctx.ID().getText()
-                
-                # Procesar argumentos si existen
+
                 if ctx.argumentos():
                     args = self.visit(ctx.argumentos())
-                    # Generar código para pasar argumentos
                     for i, arg in enumerate(args):
+                        # Pasamos cada argumento como 'param <valor>'
                         self.emitir(f"param {arg}")
-                
-                # Generar la llamada
+
                 result = self.nuevo_temporal()
                 self.emitir(f"{result} = call {func_name}")
                 return result
             else:
-                # Es solo una variable
+                # Identificador simple: devolvemos su nombre para usarlo en
+                # instrucciones posteriores.
                 return ctx.ID().getText()
         
         # Si es una expresión entre paréntesis
@@ -198,6 +219,8 @@ class IntermediateCodeGenerator(compiladorVisitor):
         for i in range(ctx.getChildCount()):
             child = ctx.getChild(i)
             if hasattr(child, 'getRuleIndex'):  # Es un nodo opal
+                # Cada 'child' corresponde a una subexpresión; la visitamos
+                # para obtener la representación (literal/identificador/temporal)
                 args.append(self.visit(child))
         return args
     
@@ -206,26 +229,49 @@ class IntermediateCodeGenerator(compiladorVisitor):
     def visitAsignacion(self, ctx):
         """
         Genera código para asignación: ID = opal;
-        Soporta: =, +=, -=, *=, /=, %=
+        Soporta: =, +=, -=, *=, /=, %=, i++, i--, ++i, --i
         """
-        variable = ctx.ID().getText()
+        primer_hijo = ctx.getChild(0).getText()
         
-        # Obtener el operador de asignación
-        op_asig = ctx.getChild(1).getText()
-        
-        # Visitar la expresión
-        valor = self.visit(ctx.opal())
-        
-        if op_asig == '=':
-            # Asignación simple
-            self.emitir(f"{variable} = {valor}")
+        if primer_hijo in ('++', '--'):
+            # Prefijo: (INCREMENTO | DECREMENTO) ID PYC  →  ++x; o --x;
+            variable = ctx.ID().getText()
+            op = '+' if primer_hijo == '++' else '-'
+            temp = self.nuevo_temporal()
+            self.emitir(f"{temp} = {variable} {op} 1")
+            self.emitir(f"{variable} = {temp}")
+        elif ctx.INCREMENTO():
+            # Postfijo: ID INCREMENTO PYC  →  x++;
+            variable = ctx.ID().getText()
+            temp = self.nuevo_temporal()
+            self.emitir(f"{temp} = {variable} + 1")
+            self.emitir(f"{variable} = {temp}")
+        elif ctx.DECREMENTO():
+            # Postfijo: ID DECREMENTO PYC  →  x--;
+            variable = ctx.ID().getText()
+            temp = self.nuevo_temporal()
+            self.emitir(f"{temp} = {variable} - 1")
+            self.emitir(f"{variable} = {temp}")
         else:
-            # Asignación compuesta (+=, -=, etc.)
-            # Convertir += a +, -= a -, etc.
-            op = op_asig[0]  # Toma el primer carácter (+, -, *, /, %)
-            result = self.nuevo_temporal()
-            self.emitir(f"{result} = {variable} {op} {valor}")
-            self.emitir(f"{variable} = {result}")
+            # Asignación normal: ID (ASIG | MASIG | ...) opal PYC
+            variable = ctx.ID().getText()
+
+            # Operador de asignación (puede ser '=', '+=', '-='...)
+            op_asig = ctx.getChild(1).getText()
+
+            # Evaluar el lado derecho y obtener su representación
+            valor = self.visit(ctx.opal())
+
+            if op_asig == '=':
+                # Asignación simple: emitimos 'variable = valor'
+                self.emitir(f"{variable} = {valor}")
+            else:
+                # Asignación compuesta: descomponemos 'x += y' en 't = x + y' y
+                # luego 'x = t' para mantener un TAC de 3 direcciones.
+                op = op_asig[0]
+                result = self.nuevo_temporal()
+                self.emitir(f"{result} = {variable} {op} {valor}")
+                self.emitir(f"{variable} = {result}")
         
         return None
     
@@ -235,13 +281,14 @@ class IntermediateCodeGenerator(compiladorVisitor):
         """
         # Procesar la primera variable
         variable = ctx.ID().getText()
-        
-        # Si hay inicialización
+
+        # Si la declaración incluye inicialización 'int x = expr;', emitimos
+        # la asignación correspondiente. Si no, registramos la variable con
+        # 'DECLARE' para dejar constancia en el código intermedio.
         if ctx.inic() and ctx.inic().ASIG():
             valor = self.visit(ctx.inic().opal())
             self.emitir(f"{variable} = {valor}")
         else:
-            # Declaración sin inicialización
             self.emitir(f"DECLARE {variable}")
         
         # Procesar listavar (variables adicionales)
@@ -305,10 +352,19 @@ class IntermediateCodeGenerator(compiladorVisitor):
     
     def visitIfor(self, ctx):
         """
-        Genera código para for: for (init; cond; iter) bloque
+        Genera código para for: for (init; cond; incr) bloque
         
-        Código generado:
-            <init>
+        Gramática:
+            ifor : FOR PA listaAsignacionFor PYC opal PYC asignacionFor PC bloque ;
+        
+        - La inicialización usa 'listaAsignacionFor' (lista separada por coma, sin PYC).
+        - La condición usa 'opal'.
+        - El incremento usa 'asignacionFor' (SIN PYC, porque va antes de ')').
+        
+        Código TAC generado:
+            <init1>
+            <init2>
+            ...
             Linicio:
                 if not <cond> goto Lfin
                 <codigo del bloque>
@@ -319,17 +375,15 @@ class IntermediateCodeGenerator(compiladorVisitor):
         label_inicio = self.nueva_etiqueta()
         label_fin = self.nueva_etiqueta()
         
-        # Inicialización (puede ser asignacionFor o declaracionFor)
-        if ctx.asignacionFor():
-            self.visit(ctx.asignacionFor(0))  # Primera asignación es la init
-        elif ctx.declaracionFor():
-            self.visit(ctx.declaracionFor())
+        # Inicialización (listaAsignacionFor: una o más asignaciones separadas por coma)
+        if ctx.listaAsignacionFor():
+            self.visit(ctx.listaAsignacionFor())
         
-        # Etiqueta de inicio
+        # Etiqueta de inicio del loop
         self.emitir(f"{label_inicio}:")
         self.indentacion += 1
         
-        # Condición (opal)
+        # Condición
         if ctx.opal():
             condicion = self.visit(ctx.opal())
             self.emitir(f"if not {condicion} goto {label_fin}")
@@ -337,9 +391,9 @@ class IntermediateCodeGenerator(compiladorVisitor):
         # Bloque de código
         self.visit(ctx.bloque())
         
-        # Incremento (segunda asignacionFor)
-        if ctx.getChildCount() > 8 and ctx.asignacionFor(1):
-            self.visit(ctx.asignacionFor(1))
+        # Incremento (usa asignacionFor, la versión sin PYC)
+        if ctx.asignacionFor():
+            self.visit(ctx.asignacionFor())
         
         # Salto al inicio
         self.emitir(f"goto {label_inicio}")
@@ -349,31 +403,67 @@ class IntermediateCodeGenerator(compiladorVisitor):
         
         return None
     
+    def visitListaAsignacionFor(self, ctx):
+        """
+        Procesa la lista de asignaciones de inicialización del for.
+        
+        Gramática:
+            listaAsignacionFor : asignacionFor (COMA asignacionFor)* ;
+        
+        Visita cada asignacionFor en la lista y genera TAC para cada una.
+        """
+        for child in ctx.asignacionFor():
+            self.visit(child)
+        return None
+    
     def visitAsignacionFor(self, ctx):
         """
-        Procesa asignaciones dentro del for
-        ID op opal | ID++ | ID--
-        """
-        variable = ctx.ID().getText()
+        Procesa la parte de incremento del for (sin punto y coma).
         
-        # Si es incremento/decremento
-        if ctx.INCREMENTO():
+        Gramática:
+            asignacionFor : ID (ASIG | MASIG | ...) opal
+                          | ID (INCREMENTO | DECREMENTO)
+                          | (INCREMENTO | DECREMENTO) ID
+                          ;
+        
+        Genera TAC para:
+        - Asignación simple:   x = <valor>
+        - Asignación compuesta: t = x + <valor>; x = t
+        - Postfijo i++ / i--:  t = x + 1; x = t
+        - Prefijo ++i / --i:   t = x + 1; x = t
+        """
+        # Determinar si es prefijo (++x) o postfijo/asignación (x++ o x = ...)
+        primer_hijo = ctx.getChild(0).getText()
+        
+        if primer_hijo in ('++', '--'):
+            # Prefijo: (INCREMENTO | DECREMENTO) ID
+            variable = ctx.ID().getText()
+            op = '+' if primer_hijo == '++' else '-'
+            temp = self.nuevo_temporal()
+            self.emitir(f"{temp} = {variable} {op} 1")
+            self.emitir(f"{variable} = {temp}")
+        elif ctx.INCREMENTO():
+            # Postfijo: ID INCREMENTO (i++)
+            variable = ctx.ID().getText()
             temp = self.nuevo_temporal()
             self.emitir(f"{temp} = {variable} + 1")
             self.emitir(f"{variable} = {temp}")
         elif ctx.DECREMENTO():
+            # Postfijo: ID DECREMENTO (i--)
+            variable = ctx.ID().getText()
             temp = self.nuevo_temporal()
             self.emitir(f"{temp} = {variable} - 1")
             self.emitir(f"{variable} = {temp}")
         else:
-            # Es asignación normal
+            # Es una asignación normal (x = expr, x += expr, etc.)
+            variable = ctx.ID().getText()
             op_asig = ctx.getChild(1).getText()
             valor = self.visit(ctx.opal())
             
             if op_asig == '=':
                 self.emitir(f"{variable} = {valor}")
             else:
-                # Asignación compuesta
+                # Asignación compuesta: descomponer x += y en t = x + y; x = t
                 op = op_asig[0]
                 result = self.nuevo_temporal()
                 self.emitir(f"{result} = {variable} {op} {valor}")
@@ -381,21 +471,6 @@ class IntermediateCodeGenerator(compiladorVisitor):
         
         return None
     
-    def visitDeclaracionFor(self, ctx):
-        """Procesa declaración dentro del for"""
-        variable = ctx.ID().getText()
-        
-        if ctx.inic() and ctx.inic().ASIG():
-            valor = self.visit(ctx.inic().opal())
-            self.emitir(f"{variable} = {valor}")
-        else:
-            self.emitir(f"DECLARE {variable}")
-        
-        # Procesar listavar si existe
-        if ctx.listavar():
-            self.visit(ctx.listavar())
-        
-        return None
     
     def visitIif(self, ctx):
         """
@@ -457,6 +532,34 @@ class IntermediateCodeGenerator(compiladorVisitor):
         return None
     
     # ========== VISITADORES GENERALES ==========
+    
+    def visitRetorno(self, ctx):
+        """
+        Genera código para return: return opal ;
+        
+        Código TAC generado:
+            return <valor>
+        """
+        valor = self.visit(ctx.opal())
+        self.emitir(f"return {valor}")
+        return None
+    
+    def visitFuncion(self, ctx):
+        """
+        Genera código para definición de función: tipo ID ( parametros ) bloque
+        
+        Código TAC generado:
+            FUNC <nombre>:
+                <cuerpo>
+            END FUNC <nombre>
+        """
+        nombre = ctx.ID().getText()
+        self.emitir(f"FUNC {nombre}:")
+        self.indentacion += 1
+        self.visit(ctx.bloque())
+        self.indentacion -= 1
+        self.emitir(f"END FUNC {nombre}")
+        return None
     
     def visitPrograma(self, ctx):
         """Visita el programa completo"""

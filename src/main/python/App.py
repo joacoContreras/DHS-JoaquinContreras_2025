@@ -41,7 +41,7 @@ class CustomErrorListener(ErrorListener):
         self.error_manager.reportar_error_sintactico(line, mensaje_simple)
 
 def main(argv):
-    archivo = "input/conErrores.txt"
+    archivo = "input/sinErrores.txt"
     if len(argv) > 1 :
         archivo = argv[1]
     

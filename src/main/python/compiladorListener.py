@@ -1,4 +1,4 @@
-# Generated from src/main/python/compilador.g4 by ANTLR 4.13.2
+# Generated from compilador.g4 by ANTLR 4.13.1
 from antlr4 import *
 if "." in __name__:
     from .compiladorParser import compiladorParser
@@ -32,6 +32,15 @@ class compiladorListener(ParseTreeListener):
 
     # Exit a parse tree produced by compiladorParser#instruccion.
     def exitInstruccion(self, ctx:compiladorParser.InstruccionContext):
+        pass
+
+
+    # Enter a parse tree produced by compiladorParser#retorno.
+    def enterRetorno(self, ctx:compiladorParser.RetornoContext):
+        pass
+
+    # Exit a parse tree produced by compiladorParser#retorno.
+    def exitRetorno(self, ctx:compiladorParser.RetornoContext):
         pass
 
 
@@ -80,21 +89,21 @@ class compiladorListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by compiladorParser#listaAsignacionFor.
+    def enterListaAsignacionFor(self, ctx:compiladorParser.ListaAsignacionForContext):
+        pass
+
+    # Exit a parse tree produced by compiladorParser#listaAsignacionFor.
+    def exitListaAsignacionFor(self, ctx:compiladorParser.ListaAsignacionForContext):
+        pass
+
+
     # Enter a parse tree produced by compiladorParser#asignacionFor.
     def enterAsignacionFor(self, ctx:compiladorParser.AsignacionForContext):
         pass
 
     # Exit a parse tree produced by compiladorParser#asignacionFor.
     def exitAsignacionFor(self, ctx:compiladorParser.AsignacionForContext):
-        pass
-
-
-    # Enter a parse tree produced by compiladorParser#declaracionFor.
-    def enterDeclaracionFor(self, ctx:compiladorParser.DeclaracionForContext):
-        pass
-
-    # Exit a parse tree produced by compiladorParser#declaracionFor.
-    def exitDeclaracionFor(self, ctx:compiladorParser.DeclaracionForContext):
         pass
 
 

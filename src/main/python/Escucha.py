@@ -219,22 +219,61 @@ class Escucha(compiladorListener):
         self.symbol_manager.eliminar_contexto()
         print("  " * self.indent + "FOR EXIT")
     
+    def enterAsignacionFor(self, ctx:compiladorParser.AsignacionForContext):
+        """Detecta asignaciones dentro del for (init e incremento) y valida la variable"""
+        linea = ctx.start.line if ctx.start else 0
+        primer_hijo = ctx.getChild(0).getText()
+        
+        if primer_hijo in ('++', '--'):
+            # Prefijo: (INCREMENTO | DECREMENTO) ID
+            id_nombre = ctx.getChild(1).getText()
+            self.validator.validar_uso_variable(
+                id_nombre, linea,
+                self.symbol_manager.obtener_tabla_simbolos()
+            )
+        elif ctx.getChildCount() >= 3:
+            # Asignación: ID op opal
+            id_nombre = primer_hijo
+            opal_ctx = ctx.getChild(2)
+            self.validator.validar_asignacion(
+                id_nombre, opal_ctx, linea,
+                self.symbol_manager.obtener_tabla_simbolos()
+            )
+        else:
+            # Postfijo: ID (INCREMENTO | DECREMENTO)
+            id_nombre = primer_hijo
+            self.validator.validar_uso_variable(
+                id_nombre, linea,
+                self.symbol_manager.obtener_tabla_simbolos()
+            )
+    
     # ============== DETECCIÓN DE USO DE VARIABLES ==============
     def enterAsignacion(self, ctx:compiladorParser.AsignacionContext):
         """Detecta asignaciones y valida la variable"""
         if ctx.getChildCount() >= 3:
             self.stats.incrementar_asignaciones()
             linea = ctx.start.line if ctx.start else 0
-            id_nombre = ctx.getChild(0).getText()
-            opal_ctx = ctx.getChild(2)  # La expresión del valor
+            primer_hijo = ctx.getChild(0).getText()
             
-            # Validar asignación usando el validador
-            self.validator.validar_asignacion(
-                id_nombre,
-                opal_ctx,
-                linea,
-                self.symbol_manager.obtener_tabla_simbolos()
-            )
+            if primer_hijo in ('++', '--'):
+                # Prefijo: (INCREMENTO | DECREMENTO) ID PYC
+                id_nombre = ctx.getChild(1).getText()
+                self.validator.validar_uso_variable(
+                    id_nombre, linea,
+                    self.symbol_manager.obtener_tabla_simbolos()
+                )
+            else:
+                # Postfijo o asignación normal: ID op ...
+                id_nombre = primer_hijo
+                opal_ctx = ctx.getChild(2)  # La expresión del valor
+                
+                # Validar asignación usando el validador
+                self.validator.validar_asignacion(
+                    id_nombre,
+                    opal_ctx,
+                    linea,
+                    self.symbol_manager.obtener_tabla_simbolos()
+                )
 
     
     def enterFactor(self, ctx:compiladorParser.FactorContext):

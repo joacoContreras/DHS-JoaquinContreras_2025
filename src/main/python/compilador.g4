@@ -75,9 +75,12 @@ instruccion : asignacion
             | iwhile
             | ifor
             | funcion
+            | retorno
             | bloque
             | opal PYC
             ;
+
+retorno : RETURN opal PYC ;
             
 bloque : LLA instrucciones LLC ;
 
@@ -89,7 +92,20 @@ ielse : ELSE instruccion
            |
            ;
 
-ifor : FOR PA (asignacion | declaracion) (opal) PYC (asignacionFor) PC bloque ;
+ifor : FOR PA listaAsignacionFor PYC opal PYC asignacionFor PC bloque ;
+
+// Lista de asignaciones separadas por coma para la inicialización del for.
+// Permite: for(x = 0, a = 1, z = 2; ...)
+listaAsignacionFor : asignacionFor (COMA asignacionFor)* ;
+
+// Versión de asignacion SIN punto y coma, usada en el incremento y en la
+// inicialización del for.
+// Se necesita porque 'asignacion' incluye PYC al final y dentro del for()
+// ni la inicialización ni el incremento llevan punto y coma.
+asignacionFor : ID (ASIG | MASIG | RESIG | MULASIG | DIVASIG | MODASIG) opal
+              | ID (INCREMENTO | DECREMENTO)
+              | (INCREMENTO | DECREMENTO) ID
+              ;
 
 declaracion : tipo ID inic listavar PYC ;
 
@@ -107,6 +123,7 @@ tipo : INT
 
 asignacion : ID (ASIG | MASIG | RESIG | MULASIG | DIVASIG | MODASIG) opal PYC
           | ID (INCREMENTO | DECREMENTO) PYC
+          | (INCREMENTO | DECREMENTO) ID PYC
           ;
 
 INCREMENTO : '++' ;
