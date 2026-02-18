@@ -1,0 +1,19 @@
+int x = 10;
+int y = 20;
+int z;
+int w;
+
+z = 3 + 5;
+w = 2 * 4;
+
+int a;
+a = x + 0;
+
+int b;
+b = y * 1;
+
+int c;
+c = x * 0;
+
+int resultado;
+resultado = a + b + c + z + w;

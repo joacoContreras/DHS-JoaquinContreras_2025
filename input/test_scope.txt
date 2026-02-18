@@ -1,0 +1,10 @@
+int x = 10;
+
+int miFuncion(int a) {
+    int localVar = 5;
+    localVar = a + localVar;
+    return localVar;
+}
+
+int r;
+r = miFuncion(x);

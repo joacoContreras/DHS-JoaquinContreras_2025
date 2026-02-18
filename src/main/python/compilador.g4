@@ -92,7 +92,17 @@ ielse : ELSE instruccion
            |
            ;
 
-ifor : FOR PA listaAsignacionFor PYC opal PYC asignacionFor PC bloque ;
+ifor : FOR PA forInit PYC opal PYC asignacionFor PC bloque ;
+
+// La inicialización del for puede ser una declaración (int i = 0) o una
+// lista de asignaciones (x = 0, y = 1).
+forInit : tipo ID inic listaVarFor
+        | listaAsignacionFor
+        ;
+
+listaVarFor : COMA ID inic listaVarFor
+            |
+            ;
 
 // Lista de asignaciones separadas por coma para la inicialización del for.
 // Permite: for(x = 0, a = 1, z = 2; ...)
@@ -130,8 +140,10 @@ INCREMENTO : '++' ;
 
 DECREMENTO : '--' ;
 
-opal : exp
+opal : relacion
      ;
+
+relacion : exp l ;
 
 exp : term e ;
 
@@ -140,9 +152,7 @@ e : SUMA term e
   |
   ;
 
-term : factor t
-     | factor l
-     ;
+term : factor t ;
 
 t : MULT factor t
   | DIV factor t
@@ -150,12 +160,13 @@ t : MULT factor t
   |
   ;
 
-l : MENOR factor l
-  | MAYOR factor l
-  | MENOREQ factor l
-  | MAYOREQ factor l
-  | EQUAL factor l
-  | NEQUAL factor l
+l : MENOR exp l
+  | MAYOR exp l
+  | MENOREQ exp l
+  | MAYOREQ exp l
+  | EQUAL exp l
+  | NEQUAL exp l
+  |
   ;
 
 funcion : tipo ID PA parametros PC bloque ;
@@ -164,7 +175,7 @@ parametros : tipo ID lista_param
            |
            ;
 
-lista_param : COMA ID lista_param
+lista_param : COMA tipo ID lista_param
             |
             ;
 

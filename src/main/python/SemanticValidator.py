@@ -118,7 +118,8 @@ class SemanticValidator:
     
     def validar_variables_no_usadas(self, tabla_simbolos):
         """
-        Valida que todas las variables declaradas hayan sido usadas
+        Valida que todas las variables declaradas hayan sido usadas.
+        Las variables no usadas generan advertencias (no errores).
         
         Args:
             tabla_simbolos: Instancia de TS
@@ -126,7 +127,7 @@ class SemanticValidator:
         for contexto in tabla_simbolos.contextos:
             for nombre, simbolo in contexto.simbolos.items():
                 if isinstance(simbolo, Variable) and not simbolo.getUsado():
-                    self.error_manager.reportar_error_semantico(
+                    self.error_manager.reportar_advertencia(
                         simbolo.getLinea(),
                         f"Variable '{nombre}' declarada pero no usada"
                     )
@@ -164,6 +165,10 @@ class SemanticValidator:
         if 'OpalContext' in tipo_regla:
             if ctx.getChildCount() > 0:
                 return self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # ===== RELACION: exp l (comparaciones) =====
+        if 'RelacionContext' in tipo_regla:
+            return self._inferir_tipo_relacion(ctx, tabla_simbolos)
         
         # Para otros contextos, método genérico
         texto = ctx.getText()
@@ -229,14 +234,30 @@ class SemanticValidator:
             # Solo factor
             return self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
         
-        # term : factor t | factor l
+        # term : factor t
         tipo_izq = self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
         
-        # Ver si hay operación (t o l)
+        # Ver si hay operación multiplicativa (t)
         if ctx.getChildCount() >= 2:
             operacion_ctx = ctx.getChild(1)
             if operacion_ctx and operacion_ctx.getChildCount() > 0:
                 return self._procesar_operacion(tipo_izq, operacion_ctx, tabla_simbolos, ctx.start.line)
+        
+        return tipo_izq
+    
+    def _inferir_tipo_relacion(self, ctx, tabla_simbolos):
+        """Infiere tipo de una relación (exp l) con validación de operaciones"""
+        if ctx.getChildCount() < 2:
+            return self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # relacion : exp l
+        tipo_izq = self.inferir_tipo(ctx.getChild(0), tabla_simbolos)
+        
+        # Ver si hay comparación 'l'
+        if ctx.getChildCount() >= 2:
+            l_ctx = ctx.getChild(1)
+            if l_ctx and l_ctx.getChildCount() > 0:
+                return self._procesar_operacion_l(tipo_izq, l_ctx, tabla_simbolos, ctx.start.line)
         
         return tipo_izq
     
@@ -258,12 +279,11 @@ class SemanticValidator:
         return tipo_izq
     
     def _procesar_operacion(self, tipo_izq, operacion_ctx, tabla_simbolos, linea):
-        """Procesa operaciones en 't' y 'l' (*, /, %, <, >, ==, etc.)"""
+        """Procesa operaciones multiplicativas en 't' (*, /, %)"""
         if not operacion_ctx or operacion_ctx.getChildCount() < 2:
             return tipo_izq
         
         # t : MULT factor t | DIV factor t | MOD factor t
-        # l : MENOR factor l | MAYOR factor l | ...
         operador = operacion_ctx.getChild(0).getText()
         tipo_der = self.inferir_tipo(operacion_ctx.getChild(1), tabla_simbolos)
         
@@ -275,6 +295,26 @@ class SemanticValidator:
             siguiente_ctx = operacion_ctx.getChild(2)
             if siguiente_ctx and siguiente_ctx.getChildCount() > 0:
                 return self._procesar_operacion(tipo_resultado, siguiente_ctx, tabla_simbolos, linea)
+        
+        return tipo_resultado
+    
+    def _procesar_operacion_l(self, tipo_izq, l_ctx, tabla_simbolos, linea):
+        """Procesa operaciones comparativas en 'l' (<, >, <=, >=, ==, !=)"""
+        if not l_ctx or l_ctx.getChildCount() < 2:
+            return tipo_izq
+        
+        # l : MENOR exp l | MAYOR exp l | ...
+        operador = l_ctx.getChild(0).getText()
+        tipo_der = self.inferir_tipo(l_ctx.getChild(1), tabla_simbolos)
+        
+        # Validar compatibilidad
+        tipo_resultado = self._validar_operacion_binaria(tipo_izq, tipo_der, operador, linea)
+        
+        # Si hay más comparaciones, procesar recursivamente
+        if l_ctx.getChildCount() >= 3:
+            siguiente_ctx = l_ctx.getChild(2)
+            if siguiente_ctx and siguiente_ctx.getChildCount() > 0:
+                return self._procesar_operacion_l(tipo_resultado, siguiente_ctx, tabla_simbolos, linea)
         
         return tipo_resultado
     

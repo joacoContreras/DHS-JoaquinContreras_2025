@@ -1,4 +1,4 @@
-# Generated from compilador.g4 by ANTLR 4.13.1
+# Generated from compilador.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .compiladorParser import compiladorParser
@@ -89,6 +89,24 @@ class compiladorListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by compiladorParser#forInit.
+    def enterForInit(self, ctx:compiladorParser.ForInitContext):
+        pass
+
+    # Exit a parse tree produced by compiladorParser#forInit.
+    def exitForInit(self, ctx:compiladorParser.ForInitContext):
+        pass
+
+
+    # Enter a parse tree produced by compiladorParser#listaVarFor.
+    def enterListaVarFor(self, ctx:compiladorParser.ListaVarForContext):
+        pass
+
+    # Exit a parse tree produced by compiladorParser#listaVarFor.
+    def exitListaVarFor(self, ctx:compiladorParser.ListaVarForContext):
+        pass
+
+
     # Enter a parse tree produced by compiladorParser#listaAsignacionFor.
     def enterListaAsignacionFor(self, ctx:compiladorParser.ListaAsignacionForContext):
         pass
@@ -158,6 +176,15 @@ class compiladorListener(ParseTreeListener):
 
     # Exit a parse tree produced by compiladorParser#opal.
     def exitOpal(self, ctx:compiladorParser.OpalContext):
+        pass
+
+
+    # Enter a parse tree produced by compiladorParser#relacion.
+    def enterRelacion(self, ctx:compiladorParser.RelacionContext):
+        pass
+
+    # Exit a parse tree produced by compiladorParser#relacion.
+    def exitRelacion(self, ctx:compiladorParser.RelacionContext):
         pass
 
 

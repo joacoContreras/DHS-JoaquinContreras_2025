@@ -9,9 +9,10 @@ class ErrorManager:
     _instance = None
     
     def __init__(self):
-        """Inicializa las listas de errores"""
+        """Inicializa las listas de errores y advertencias"""
         self.errores_sintacticos = []
         self.errores_semanticos = []
+        self.advertencias = []
     
     @classmethod
     def getInstance(cls):
@@ -27,9 +28,10 @@ class ErrorManager:
         return cls._instance
     
     def reiniciar(self):
-        """Limpia todas las listas de errores"""
+        """Limpia todas las listas de errores y advertencias"""
         self.errores_sintacticos = []
         self.errores_semanticos = []
+        self.advertencias = []
     
     def reportar_error_sintactico(self, linea, mensaje):
         """
@@ -54,6 +56,18 @@ class ErrorManager:
         error = f"[SEMÁNTICO] Línea {linea}: {mensaje}"
         self.errores_semanticos.append(error)
         print(f"{error}")
+    
+    def reportar_advertencia(self, linea, mensaje):
+        """
+        Reporta una advertencia (no bloquea la generación de TAC)
+        
+        Args:
+            linea: Número de línea donde ocurre la advertencia
+            mensaje: Descripción de la advertencia
+        """
+        adv = f"[ADVERTENCIA] Línea {linea}: {mensaje}"
+        self.advertencias.append(adv)
+        print(f"{adv}")
     
     def tiene_errores(self):
         """Retorna True si hay algún error registrado"""
@@ -86,6 +100,13 @@ class ErrorManager:
                 print(tabla_simbolos)
             else:
                 print("\nAnálisis completado sin errores")
+            
+            # Mostrar advertencias si las hay
+            if self.advertencias:
+                print("\nADVERTENCIAS:")
+                print("-" * 60)
+                for adv in self.advertencias:
+                    print(f"  {adv}")
             return
         
         # Hay errores, mostrar reporte detallado
@@ -98,6 +119,8 @@ class ErrorManager:
         print(f"Total de errores: {self.obtener_total_errores()}")
         print(f"  • Errores sintácticos: {len(self.errores_sintacticos)}")
         print(f"  • Errores semánticos: {len(self.errores_semanticos)}")
+        if self.advertencias:
+            print(f"  • Advertencias: {len(self.advertencias)}")
         print("=" * 60)
         
         if self.errores_sintacticos:
@@ -111,6 +134,12 @@ class ErrorManager:
             print("-" * 60)
             for error in self.errores_semanticos:
                 print(f"  {error}")
+        
+        if self.advertencias:
+            print("\nADVERTENCIAS:")
+            print("-" * 60)
+            for adv in self.advertencias:
+                print(f"  {adv}")
         
         print("\n" + "=" * 60)
     

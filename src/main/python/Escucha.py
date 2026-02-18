@@ -29,9 +29,11 @@ class Escucha(compiladorListener):
         self.stats = StatsCollector()
 
     def enterPrograma(self, ctx: compiladorParser.ProgramaContext):
-        """Inicio del análisis"""
+        """Inicio del análisis - NO reiniciar errores aquí"""
         print("Comienza el parsing")
-        self.error_manager.reiniciar()
+        # Los errores sintácticos se capturan durante el parsing (antes del walk).
+        # El ErrorManager se reinicia en App.py ANTES del parsing, así que
+        # no debemos llamar reiniciar() aquí o perderíamos los errores sintácticos.
 
     def exitPrograma(self, ctx: compiladorParser.ProgramaContext):
         """Finalización del análisis"""
@@ -163,34 +165,72 @@ class Escucha(compiladorListener):
             print("  -- ListaVar(%d) Cant. hijos  = %d" % (self.profundidad + 1, ctx.getChildCount()))
     
     def enterFuncion(self, ctx:compiladorParser.FuncionContext):
-        """Entrada a una función"""
+        """Entrada a una función - registra función, abre scope, agrega parámetros a la pila"""
         self.stats.incrementar_funciones()
         print("  " * self.indent + " FUNCION ENTER")
         self.indent += 1
-        self.symbol_manager.agregar_contexto()
-    
-    def exitFuncion(self, ctx:compiladorParser.FuncionContext):
-        """Salida de una función"""
-        # Estructura: tipo ID PA parametros PC bloque
+        
+        # 1. REGISTRAR FUNCIÓN EN EL SCOPE PADRE (antes de abrir scope hijo)
+        #    Esto permite llamadas recursivas y que la función sea visible desde fuera.
+        linea = ctx.start.line if ctx.start else 0
         if ctx.getChildCount() >= 6:
             tipo_retorno = ctx.getChild(0).getText()
             nombre_funcion = ctx.getChild(1).getText()
-            linea = ctx.start.line if ctx.start else 0
             
-            # Extraer parámetros (simplificado)
-            params = []
-            parametros_ctx = ctx.getChild(3)
+            params_tipos = []
+            parametros_ctx = ctx.parametros()
             if parametros_ctx and parametros_ctx.getChildCount() > 0:
-                params.append("...")
+                if parametros_ctx.tipo():
+                    params_tipos.append(parametros_ctx.tipo().getText())
+                lista = parametros_ctx.lista_param()
+                while lista and lista.getChildCount() > 0:
+                    if lista.tipo():
+                        params_tipos.append(lista.tipo().getText())
+                    lista = lista.lista_param() if hasattr(lista, 'lista_param') else None
             
-            # Eliminar contexto de la función y agregar el símbolo
-            self.symbol_manager.eliminar_contexto()
-            self.symbol_manager.agregar_funcion(nombre_funcion, tipo_retorno, params, linea)
+            self.symbol_manager.agregar_funcion(nombre_funcion, tipo_retorno, params_tipos, linea)
+        
+        # 2. ABRIR SCOPE HIJO para el cuerpo de la función
+        self.symbol_manager.agregar_contexto()
+        
+        # 3. AGREGAR PARÁMETROS A LA PILA (push al scope de la función)
+        #    Los parámetros se "push" al scope local de la función.
+        #    Cuando se usen dentro del cuerpo, se buscan en este scope ("pop" conceptual).
+        parametros_ctx = ctx.parametros()
+        if parametros_ctx and parametros_ctx.getChildCount() > 0:
+            # Primer parámetro: tipo ID lista_param
+            if parametros_ctx.tipo() and parametros_ctx.ID():
+                tipo_param = parametros_ctx.tipo().getText()
+                nombre_param = parametros_ctx.ID().getText()
+                self.symbol_manager.agregar_variable(
+                    nombre_param, tipo_param, linea, inicializado=True
+                )
+                print(f"  -> Parámetro '{nombre_param}' (tipo '{tipo_param}') push a pila/scope")
             
-            self.indent -= 1
+            # Parámetros adicionales: lista_param → COMA tipo ID lista_param
+            lista = parametros_ctx.lista_param()
+            while lista and lista.getChildCount() > 0:
+                if lista.tipo() and lista.ID():
+                    tipo_param = lista.tipo().getText()
+                    nombre_param = lista.ID().getText()
+                    self.symbol_manager.agregar_variable(
+                        nombre_param, tipo_param, linea, inicializado=True
+                    )
+                    print(f"  -> Parámetro '{nombre_param}' (tipo '{tipo_param}') push a pila/scope")
+                lista = lista.lista_param() if hasattr(lista, 'lista_param') else None
+    
+    def exitFuncion(self, ctx:compiladorParser.FuncionContext):
+        """Salida de una función - cierra el scope de la función (pop de la pila)"""
+        # Al cerrar el scope, los parámetros y variables locales se eliminan
+        # (se "sacan de la pila"), quedando inaccesibles desde fuera.
+        self.symbol_manager.eliminar_contexto()
+        self.indent -= 1
+        
+        if ctx.getChildCount() >= 6:
+            nombre_funcion = ctx.getChild(1).getText()
+            tipo_retorno = ctx.getChild(0).getText()
             print("  " * self.indent + f" FUNCION EXIT: {nombre_funcion}() -> {tipo_retorno}")
         else:
-            self.indent -= 1
             print("  " * self.indent + " FUNCION EXIT (incompleta)")
     
     def enterIif(self, ctx:compiladorParser.IifContext):
@@ -218,6 +258,42 @@ class Escucha(compiladorListener):
         self.indent -= 1
         self.symbol_manager.eliminar_contexto()
         print("  " * self.indent + "FOR EXIT")
+    
+    def enterForInit(self, ctx):
+        """Detecta declaraciones en la inicialización del for"""
+        # forInit : tipo ID inic listaVarFor | listaAsignacionFor
+        if ctx.tipo():
+            # Es una declaración: tipo ID inic listaVarFor
+            linea = ctx.start.line if ctx.start else 0
+            tipo = ctx.tipo().getText()
+            nombre = ctx.ID().getText()
+            inicializado = ctx.inic() and ctx.inic().getChildCount() > 0
+            
+            # Validar doble declaración
+            if self.validator.validar_doble_declaracion(
+                nombre, linea, self.symbol_manager.obtener_tabla_simbolos()
+            ):
+                self.symbol_manager.agregar_variable(nombre, tipo, linea, inicializado)
+            
+            # Procesar variables adicionales en listaVarFor
+            self._procesar_listaVarFor(ctx.listaVarFor(), tipo, linea)
+    
+    def _procesar_listaVarFor(self, ctx, tipo, linea):
+        """Procesa variables adicionales en listaVarFor de la inicialización del for"""
+        if ctx is None or ctx.getChildCount() == 0:
+            return
+        
+        # listaVarFor : COMA ID inic listaVarFor | ;
+        nombre = ctx.ID().getText() if ctx.ID() else None
+        if nombre:
+            inicializado = ctx.inic() and ctx.inic().getChildCount() > 0
+            if self.validator.validar_doble_declaracion(
+                nombre, linea, self.symbol_manager.obtener_tabla_simbolos()
+            ):
+                self.symbol_manager.agregar_variable(nombre, tipo, linea, inicializado)
+        
+        if ctx.listaVarFor():
+            self._procesar_listaVarFor(ctx.listaVarFor(), tipo, linea)
     
     def enterAsignacionFor(self, ctx:compiladorParser.AsignacionForContext):
         """Detecta asignaciones dentro del for (init e incremento) y valida la variable"""
@@ -277,7 +353,7 @@ class Escucha(compiladorListener):
 
     
     def enterFactor(self, ctx:compiladorParser.FactorContext):
-        """Detecta uso de variables en expresiones"""
+        """Detecta uso de variables y funciones en expresiones"""
         # factor puede ser: PA exp PC | NUMERO | ID | ID PA argumentos? PC
         linea = ctx.start.line if ctx.start else 0
         
@@ -285,13 +361,29 @@ class Escucha(compiladorListener):
         if ctx.getChildCount() > 0:
             primer_hijo = ctx.getChild(0).getText()
             
-            # Verificar si es un identificador válido
-            if primer_hijo.isidentifier() and primer_hijo not in ['int', 'double', 'if', 'while', 'for', 'return']:
-                self.validator.validar_uso_variable(
-                    primer_hijo,
-                    linea,
-                    self.symbol_manager.obtener_tabla_simbolos()
-                )
+            # Verificar si es un identificador válido (no palabra reservada)
+            palabras_reservadas = ['int', 'double', 'if', 'while', 'for', 'return', 'else']
+            if primer_hijo.isidentifier() and primer_hijo not in palabras_reservadas:
+                # Distinguir entre función call y variable
+                if ctx.PA():
+                    # Es una llamada a función: ID PA argumentos? PC
+                    # Validar que la función exista (no como variable)
+                    from tablaDeSimbolos import Funcion
+                    simbolo = self.symbol_manager.obtener_tabla_simbolos().buscarSimbolo(primer_hijo)
+                    if simbolo is None:
+                        self.error_manager.reportar_error_semantico(
+                            linea,
+                            f"Función '{primer_hijo}' no ha sido declarada"
+                        )
+                    else:
+                        simbolo.setUsado()
+                else:
+                    # Es una variable: validar declaración, inicialización y marcar uso
+                    self.validator.validar_uso_variable(
+                        primer_hijo,
+                        linea,
+                        self.symbol_manager.obtener_tabla_simbolos()
+                    )
                 
     def enterEveryRule(self, ctx):
         """Se ejecuta al entrar a cualquier regla"""

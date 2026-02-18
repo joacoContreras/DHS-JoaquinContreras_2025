@@ -76,6 +76,7 @@ class SymbolTableManager:
         """
         funcion = Funcion(nombre, tipo_retorno, parametros)
         funcion.setLinea(linea)
+        funcion.setInicializado(linea)  # Funciones están "inicializadas" al declararse
         
         exito = self.ts.addSimbolo(funcion)
         

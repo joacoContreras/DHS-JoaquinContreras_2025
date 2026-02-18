@@ -12,6 +12,8 @@ from compiladorParser import compiladorParser
 from Escucha import Escucha
 from Caminante import Caminante
 from IntermediateCodeGenerator import IntermediateCodeGenerator
+from TACOptimizer import TACOptimizer
+from ErrorManager import ErrorManager
 
 class CustomErrorListener(ErrorListener):
     """Listener personalizado para capturar errores sintácticos de ANTLR"""
@@ -41,10 +43,12 @@ class CustomErrorListener(ErrorListener):
         self.error_manager.reportar_error_sintactico(line, mensaje_simple)
 
 def main(argv):
-    archivo = "input/sinErrores.txt"
+    archivo = "input/test_optimizacion.txt"
     if len(argv) > 1 :
         archivo = argv[1]
     
+    # Reiniciar el ErrorManager ANTES del parsing para empezar limpio
+    error_manager = ErrorManager.reset()
     
     input = FileStream(archivo, encoding='utf-8')
     lexer = compiladorLexer(input)
@@ -70,24 +74,54 @@ def main(argv):
     print(escucha)
     print("="*60)
     
-    # Solo mostrar el árbol si NO hay errores
-    if not escucha.error_manager.tiene_errores():
-        print("\nÁRBOL SINTÁCTICO:")
-        print(tree.toStringTree(recog=parser))
-        
-        # Recorrer el árbol con el caminante
-        caminante = Caminante()
-        caminante.visit(tree)
-        caminante.primerNumeroHojas()
-        
-        # GENERAR CÓDIGO INTERMEDIO
+    # ===== VERIFICACIÓN DE ERRORES =====
+    # NO generar código TAC si hay errores (sintácticos o semánticos)
+    if escucha.error_manager.tiene_errores():
         print("\n" + "="*60)
-        print("CÓDIGO INTERMEDIO")
+        print("   NO SE GENERA CÓDIGO INTERMEDIO   ")
+        print("   El programa contiene errores que deben corregirse primero.")
         print("="*60)
-        generador = IntermediateCodeGenerator()
-        generador.visit(tree)
-        print(generador.obtener_codigo())
-        print("="*60)
+        return
+    
+    # Solo mostrar el árbol si NO hay errores
+    print("\nÁRBOL SINTÁCTICO:")
+    print(tree.toStringTree(recog=parser))
+    
+    # Recorrer el árbol con el caminante
+    caminante = Caminante()
+    caminante.visit(tree)
+    caminante.primerNumeroHojas()
+    
+    # ===== GENERAR CÓDIGO INTERMEDIO (TAC ORIGINAL) =====
+    generador = IntermediateCodeGenerator()
+    generador.visit(tree)
+    codigo_original = generador.obtener_codigo()
+    
+    print("\n" + "="*60)
+    print("CÓDIGO INTERMEDIO ")
+    print("="*60)
+    print(codigo_original)
+    print("="*60)
+    
+    # ===== OPTIMIZAR CÓDIGO TAC =====
+    optimizador = TACOptimizer(codigo_original)
+    codigo_optimizado = optimizador.optimizar()
+    
+    print("\n" + "="*60)
+    print("CÓDIGO INTERMEDIO OPTIMIZADO")
+    print("="*60)
+    print(codigo_optimizado)
+    print("="*60)
+    
+    # ===== REPORTE DE OPTIMIZACIÓN =====
+    print("\n" + "="*60)
+    print("REPORTE DE OPTIMIZACIÓN")
+    print("="*60)
+    print(optimizador.obtener_reporte())
+    print("-"*60)
+    print("COMPARACIÓN:")
+    print(optimizador.obtener_comparacion(codigo_original))
+    print("="*60)
 
 if __name__ == '__main__':
     main(sys.argv)

@@ -1,0 +1,33 @@
+int resultado;
+int a = 5;
+int b = 10;
+
+int suma(int x, int y) {
+    int temp;
+    temp = x + y;
+    return temp;
+}
+
+resultado = suma(a, b);
+
+int factorial(int n) {
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}
+
+int c;
+c = factorial(a);
+
+while (c > 100) {
+    c = c - 10;
+}
+
+if (c > 50) {
+    c = c - 25;
+} else {
+    c = c + 25;
+}
+
+for (int i = 0; i < 10; i++) {
+    resultado = resultado + i;
+}

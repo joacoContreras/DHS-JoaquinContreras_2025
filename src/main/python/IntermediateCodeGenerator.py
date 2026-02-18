@@ -50,17 +50,28 @@ class IntermediateCodeGenerator(compiladorVisitor):
                 representación (literal, identificador o temporal) del resultado.
 
                 Contract:
-                - Input: ctx (OpalContext) que contiene una producción 'exp'.
+                - Input: ctx (OpalContext) que contiene una producción 'relacion'.
                 - Output: string con el nombre del lugar donde está el resultado
                     (por ejemplo '5', 'x' o 't0').
-                - Efectos: delega totalmente en visitExp; puede provocar que se
+                - Efectos: delega totalmente en visitRelacion; puede provocar que se
                     emitan instrucciones TAC cuando las subexpresiones lo requieran.
-
-                Nota: Este método es un adaptador simple que mantiene la separación
-                entre la regla léxica "opal" y la implementación de la lógica en
-                visitExp.
                 """
-                return self.visit(ctx.exp())
+                return self.visit(ctx.relacion())
+
+    def visitRelacion(self, ctx):
+        """
+        Maneja relaciones: relacion = exp l
+        Donde l puede ser: < exp l | > exp l | ... | vacio
+        
+        Primero evalúa la expresión aritmética, luego aplica
+        operadores de comparación si existen.
+        """
+        result = self.visit(ctx.exp())
+        
+        if ctx.l():
+            result = self.visit_l(ctx.l(), result)
+        
+        return result
     
     def visitExp(self, ctx):
         """
@@ -110,21 +121,17 @@ class IntermediateCodeGenerator(compiladorVisitor):
     
     def visitTerm(self, ctx):
         """
-        Maneja términos: term = factor (t | l)
-        t: operaciones multiplicativas
-        l: operaciones comparativas
+        Maneja términos: term = factor t
+        t: operaciones multiplicativas (*, /, %)
+        
+        Las comparaciones se manejan ahora en visitRelacion/visit_l.
         """
         # Evaluar el primer factor (puede ser número, variable o subexpresión
-        # parentizada) y luego aplicar multiplicaciones/divisiones (t) y/o
-        # comparaciones (l) si existen. Las reglas 't' y 'l' consumen parte
-        # del árbol y devuelven la representación acumulada.
+        # parentizada) y luego aplicar multiplicaciones/divisiones (t).
         result = self.visit(ctx.factor())
 
         if ctx.t():
             result = self.visit_t(ctx.t(), result)
-
-        if ctx.l():
-            result = self.visit_l(ctx.l(), result)
 
         return result
     
@@ -154,15 +161,18 @@ class IntermediateCodeGenerator(compiladorVisitor):
     def visit_l(self, ctx, left_operand):
         """
         Procesa operaciones comparativas (l)
-        l : MENOR | MAYOR | MENOREQ | MAYOREQ | EQUAL | NEQUAL factor l | vacío
+        l : MENOR exp l | MAYOR exp l | ... | vacío
+        
+        Ahora opera sobre expresiones completas (exp) en lugar de factores,
+        permitiendo comparaciones como (a + b) < (c + d).
         """
-        # Si no hay comparador, devolvemos el operando acumulado.
+        # Caso base: producción vacía (epsilon)
         if ctx.getChildCount() == 0:
             return left_operand
 
-        # Comparadores: tomar operador y evaluar el operando derecho
+        # Comparadores: tomar operador y evaluar la expresión derecha
         op = ctx.getChild(0).getText()
-        right = self.visit(ctx.factor())
+        right = self.visit(ctx.exp())
 
         # Crear temporal para el resultado de la comparación
         result = self.nuevo_temporal()
@@ -352,19 +362,17 @@ class IntermediateCodeGenerator(compiladorVisitor):
     
     def visitIfor(self, ctx):
         """
-        Genera código para for: for (init; cond; incr) bloque
+        Genera código para for: for (forInit; cond; incr) bloque
         
-        Gramática:
-            ifor : FOR PA listaAsignacionFor PYC opal PYC asignacionFor PC bloque ;
+        Gramática actualizada:
+            ifor : FOR PA forInit PYC opal PYC asignacionFor PC bloque ;
+            forInit : tipo ID inic listaVarFor | listaAsignacionFor ;
         
-        - La inicialización usa 'listaAsignacionFor' (lista separada por coma, sin PYC).
-        - La condición usa 'opal'.
-        - El incremento usa 'asignacionFor' (SIN PYC, porque va antes de ')').
+        Ahora soporta declaraciones en la inicialización:
+            for (int i = 0; i < 5; i++)
         
         Código TAC generado:
-            <init1>
-            <init2>
-            ...
+            <init>
             Linicio:
                 if not <cond> goto Lfin
                 <codigo del bloque>
@@ -375,9 +383,9 @@ class IntermediateCodeGenerator(compiladorVisitor):
         label_inicio = self.nueva_etiqueta()
         label_fin = self.nueva_etiqueta()
         
-        # Inicialización (listaAsignacionFor: una o más asignaciones separadas por coma)
-        if ctx.listaAsignacionFor():
-            self.visit(ctx.listaAsignacionFor())
+        # Inicialización (puede ser declaración o lista de asignaciones)
+        if ctx.forInit():
+            self.visit(ctx.forInit())
         
         # Etiqueta de inicio del loop
         self.emitir(f"{label_inicio}:")
@@ -400,6 +408,57 @@ class IntermediateCodeGenerator(compiladorVisitor):
         
         self.indentacion -= 1
         self.emitir(f"{label_fin}:")
+        
+        return None
+    
+    def visitForInit(self, ctx):
+        """
+        Procesa la inicialización del for.
+        
+        Gramática:
+            forInit : tipo ID inic listaVarFor | listaAsignacionFor ;
+        
+        Si es una declaración (tipo ID inic listaVarFor), genera DECLARE y/o
+        asignación. Si es lista de asignaciones, delega a visitListaAsignacionFor.
+        """
+        # Si tiene tipo, es una declaración (alternativa 1)
+        if ctx.tipo():
+            variable = ctx.ID().getText()
+            if ctx.inic() and ctx.inic().ASIG():
+                valor = self.visit(ctx.inic().opal())
+                self.emitir(f"{variable} = {valor}")
+            else:
+                self.emitir(f"DECLARE {variable}")
+            
+            # Procesar variables adicionales
+            if ctx.listaVarFor():
+                self.visit(ctx.listaVarFor())
+        else:
+            # Es una lista de asignaciones (alternativa 2)
+            if ctx.listaAsignacionFor():
+                self.visit(ctx.listaAsignacionFor())
+        
+        return None
+    
+    def visitListaVarFor(self, ctx):
+        """
+        Procesa variables adicionales en la declaración del forInit.
+        
+        Gramática:
+            listaVarFor : COMA ID inic listaVarFor | ;
+        """
+        if ctx.getChildCount() == 0:
+            return None
+        
+        variable = ctx.ID().getText()
+        if ctx.inic() and ctx.inic().ASIG():
+            valor = self.visit(ctx.inic().opal())
+            self.emitir(f"{variable} = {valor}")
+        else:
+            self.emitir(f"DECLARE {variable}")
+        
+        if ctx.listaVarFor():
+            self.visit(ctx.listaVarFor())
         
         return None
     
@@ -548,14 +607,37 @@ class IntermediateCodeGenerator(compiladorVisitor):
         """
         Genera código para definición de función: tipo ID ( parametros ) bloque
         
+        Los parámetros se sacan de la pila de parámetros (pop) al entrar
+        a la función, simulando cómo un procesador real manejaría el
+        paso de parámetros.
+        
         Código TAC generado:
             FUNC <nombre>:
+                pop <param1>
+                pop <param2>
+                ...
                 <cuerpo>
             END FUNC <nombre>
         """
         nombre = ctx.ID().getText()
         self.emitir(f"FUNC {nombre}:")
         self.indentacion += 1
+        
+        # Extraer parámetros y generar instrucciones 'pop' para cada uno
+        # Esto simula sacar los valores de la pila de parámetros
+        parametros = ctx.parametros()
+        if parametros and parametros.getChildCount() > 0:
+            # Primer parámetro: tipo ID
+            if parametros.ID():
+                self.emitir(f"pop {parametros.ID().getText()}")
+            
+            # Parámetros adicionales: lista_param → COMA tipo ID lista_param
+            lista = parametros.lista_param()
+            while lista and lista.getChildCount() > 0:
+                if lista.ID():
+                    self.emitir(f"pop {lista.ID().getText()}")
+                lista = lista.lista_param()
+        
         self.visit(ctx.bloque())
         self.indentacion -= 1
         self.emitir(f"END FUNC {nombre}")

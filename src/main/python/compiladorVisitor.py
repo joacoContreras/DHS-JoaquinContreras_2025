@@ -1,4 +1,4 @@
-# Generated from compilador.g4 by ANTLR 4.13.1
+# Generated from compilador.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .compiladorParser import compiladorParser
@@ -54,6 +54,16 @@ class compiladorVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by compiladorParser#forInit.
+    def visitForInit(self, ctx:compiladorParser.ForInitContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by compiladorParser#listaVarFor.
+    def visitListaVarFor(self, ctx:compiladorParser.ListaVarForContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by compiladorParser#listaAsignacionFor.
     def visitListaAsignacionFor(self, ctx:compiladorParser.ListaAsignacionForContext):
         return self.visitChildren(ctx)
@@ -91,6 +101,11 @@ class compiladorVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by compiladorParser#opal.
     def visitOpal(self, ctx:compiladorParser.OpalContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by compiladorParser#relacion.
+    def visitRelacion(self, ctx:compiladorParser.RelacionContext):
         return self.visitChildren(ctx)
 
 
