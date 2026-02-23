@@ -194,7 +194,7 @@ class Escucha(compiladorListener):
         self.symbol_manager.agregar_contexto()
         
         # 3. AGREGAR PARÁMETROS A LA PILA (push al scope de la función)
-        #    Los parámetros se "push" al scope local de la función.
+        #    Los parámetros se "pushean" al scope local de la función.
         #    Cuando se usen dentro del cuerpo, se buscan en este scope ("pop" conceptual).
         parametros_ctx = ctx.parametros()
         if parametros_ctx and parametros_ctx.getChildCount() > 0:
@@ -377,6 +377,21 @@ class Escucha(compiladorListener):
                         )
                     else:
                         simbolo.setUsado()
+                        # Validar cantidad de argumentos
+                        if isinstance(simbolo, Funcion):
+                            params_esperados = len(simbolo.getListaArgs())
+                            args_ctx = ctx.argumentos()
+                            if args_ctx:
+                                # argumentos : opal (COMA opal)*
+                                # contar los nodos 'opal' dentro de argumentos
+                                args_pasados = len(args_ctx.opal())
+                            else:
+                                args_pasados = 0
+                            if args_pasados != params_esperados:
+                                self.error_manager.reportar_error_semantico(
+                                    linea,
+                                    f"Llamada a '{primer_hijo}()': se esperaban {params_esperados} argumento(s), pero se pasaron {args_pasados}"
+                                )
                 else:
                     # Es una variable: validar declaración, inicialización y marcar uso
                     self.validator.validar_uso_variable(

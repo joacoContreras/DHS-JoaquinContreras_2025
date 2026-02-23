@@ -36,6 +36,8 @@ MAYOREQ : '>=' ;
 EQUAL : '==' ;
 NEQUAL : '!=' ;
 
+// Literales numéricos (DECIMAL antes de NUMERO para que 3.14 no se rompa)
+DECIMAL : DIGITO+ '.' DIGITO+ ;
 NUMERO : DIGITO+ ;
 
 // Palabras reservadas
@@ -52,16 +54,6 @@ ID : (LETRA | '_')(LETRA | DIGITO | '_')* ;
 // Ignorar espacios en blanco
 WS : [ \n\r\t] -> skip ;
 OTRO : . ;
-
-// s : ID     {print("ID ->" + $ID.text + "<--") }         s
-//   | NUMERO {print("NUMERO ->" + $NUMERO.text + "<--") } s
-//   | OTRO   {print("Otro ->" + $OTRO.text + "<--") }     s
-//   | EOF
-//   ;
-
-// s : PA s PC s
-//   |
-//   ;
 
 programa : instrucciones EOF ;
 
@@ -181,6 +173,7 @@ lista_param : COMA tipo ID lista_param
 
 factor : PA exp PC
        | NUMERO
+       | DECIMAL
        | ID
        | ID PA argumentos? PC ;
 

@@ -180,7 +180,7 @@ class TACOptimizer:
         return cambios
     
     # ================================================================
-    # ELIMINACIÓN DE CÓDIGO MUERTO 
+    # ELIMINACIÓN DE CÓDIGO MUERTO
     # ================================================================
     def _dead_code_elimination(self):
         """

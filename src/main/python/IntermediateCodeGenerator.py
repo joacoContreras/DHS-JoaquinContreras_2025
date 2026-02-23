@@ -193,6 +193,10 @@ class IntermediateCodeGenerator(compiladorVisitor):
         if ctx.NUMERO():
             return ctx.NUMERO().getText()
         
+        # Si es un literal decimal (3.14, 0.0, etc.)
+        elif ctx.DECIMAL():
+            return ctx.DECIMAL().getText()
+        
         # Si es un identificador
         elif ctx.ID():
             # Si tiene paréntesis, es una llamada a función; debemos evaluar

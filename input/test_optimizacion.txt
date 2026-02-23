@@ -17,3 +17,5 @@ c = x * 0;
 
 int resultado;
 resultado = a + b + c + z + w;
+
+

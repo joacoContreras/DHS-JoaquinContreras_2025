@@ -1,4 +1,9 @@
 import sys
+import os
+
+# Calcular la raíz del proyecto (3 niveles arriba de src/main/python/)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
 try:
     from antlr4 import FileStream, CommonTokenStream
     from antlr4.error.ErrorListener import ErrorListener
@@ -43,9 +48,17 @@ class CustomErrorListener(ErrorListener):
         self.error_manager.reportar_error_sintactico(line, mensaje_simple)
 
 def main(argv):
-    archivo = "input/test_optimizacion.txt"
+    archivo = "input/sinErrores.txt"
     if len(argv) > 1 :
         archivo = argv[1]
+    
+    # Si la ruta es relativa, resolverla respecto a la raíz del proyecto
+    if not os.path.isabs(archivo):
+        archivo = os.path.join(PROJECT_ROOT, archivo)
+    
+    if not os.path.exists(archivo):
+        print(f"Error: No se encontró el archivo '{archivo}'")
+        sys.exit(1)
     
     # Reiniciar el ErrorManager ANTES del parsing para empezar limpio
     error_manager = ErrorManager.reset()
